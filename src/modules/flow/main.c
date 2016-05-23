@@ -51,7 +51,8 @@
 #include "settings.h"
 #include "utils.h"
 #include "led.h"
-#include "flow.h"
+//#include "flow.h"
+
 #include "dcmi.h"
 #include "mt9v034.h"
 #include "gyro.h"
@@ -67,6 +68,13 @@
 #include "main.h"
 #include <uavcan_if.h>
 #include <px4_macros.h>
+
+
+/* Dolphin_Pose Specific */
+#include "ellipse.h"
+#include "threshold.h"
+#include "fast-edge.h"
+
 
 //#define CONFIG_USE_PROBES
 #include <bsp/probes.h>
@@ -88,6 +96,8 @@ __ALIGN_BEGIN USB_OTG_CORE_HANDLE  USB_OTG_dev __ALIGN_END;
 /* fast image buffers for calculations */
 uint8_t image_buffer_8bit_1[FULL_IMAGE_SIZE] __attribute__((section(".ccm")));
 uint8_t image_buffer_8bit_2[FULL_IMAGE_SIZE] __attribute__((section(".ccm")));
+uint8_t image_buffer_8bit_3[FULL_IMAGE_SIZE] __attribute__((section(".ccm")));
+
 uint8_t buffer_reset_needed;
 
 /* boot time in milliseconds ticks */
@@ -154,13 +164,13 @@ void timer_update_ms(void)
 		LEDToggle(LED_ACT);
 		timer[TIMER_LED] = LED_TIMER_COUNT;
 	}
-
+#if 0
 	if (timer[TIMER_SONAR] == 0)
 	{
-		sonar_trigger();
+		//sonar_trigger();
 		timer[TIMER_SONAR] = SONAR_TIMER_COUNT;
 	}
-
+#endif
 	if (timer[TIMER_SYSTEM_STATE] == 0)
 	{
 		send_system_state_now = true;
@@ -285,29 +295,38 @@ int main(void)
 	enable_image_capture();
 
 	/* gyro config */
-	gyro_config();
+	//gyro_config();
 
 	/* init and clear fast image buffers */
 	for (int i = 0; i < global_data.param[PARAM_IMAGE_WIDTH] * global_data.param[PARAM_IMAGE_HEIGHT]; i++)
 	{
 		image_buffer_8bit_1[i] = 0;
 		image_buffer_8bit_2[i] = 0;
+		/* Modified */
+		image_buffer_8bit_3[i] = 0;
 	}
 
 	uint8_t * current_image = image_buffer_8bit_1;
 	uint8_t * previous_image = image_buffer_8bit_2;
+	  struct image image_current, image_buffer_1, image_buffer_2;
+	  image_current.width = image_buffer_1.width = image_buffer_2.width = global_data.param[PARAM_IMAGE_WIDTH];
+	  image_current.height = image_buffer_1.height = image_buffer_2.height = global_data.param[PARAM_IMAGE_HEIGHT];
+	  image_current.pixel_data      =       image_buffer_8bit_1;
+	  image_buffer_1.pixel_data     =       image_buffer_8bit_2;
+	  image_buffer_2.pixel_data     =       image_buffer_8bit_3;
 
 	/* usart config*/
 	usart_init();
 
     /* i2c config*/
     i2c_init();
-
+#if 0
 	/* sonar config*/
 	float sonar_distance_filtered = 0.0f; // distance in meter
 	float sonar_distance_raw = 0.0f; // distance in meter
 	bool distance_valid = false;
 	sonar_config();
+#endif
 
 	/* reset/start timers */
 	timer[TIMER_SONAR] = SONAR_TIMER_COUNT;
@@ -317,9 +336,9 @@ int main(void)
 	timer[TIMER_IMAGE] = global_data.param[PARAM_VIDEO_RATE];
 
 	/* variables */
-	uint32_t counter = 0;
-	uint8_t qual = 0;
-
+//	uint32_t counter = 0;
+//	uint8_t qual = 0;
+#if 0
 	/* bottom flow variables */
 	float pixel_flow_x = 0.0f;
 	float pixel_flow_y = 0.0f;
@@ -342,7 +361,7 @@ int main(void)
 	static uint32_t integration_timespan = 0;
 	static uint32_t lasttime = 0;
 	uint32_t time_since_last_sonar_update= 0;
-
+#endif
 	uavcan_start();
 	/* main loop */
 	while (1)
@@ -358,6 +377,8 @@ int main(void)
 			{
 				image_buffer_8bit_1[i] = 0;
 				image_buffer_8bit_2[i] = 0;
+				/* Modified */
+				image_buffer_8bit_3[i] = 0;
 			}
 			delay(500);
 			continue;
@@ -398,7 +419,18 @@ int main(void)
 		}
 
 		uint16_t image_size = global_data.param[PARAM_IMAGE_WIDTH] * global_data.param[PARAM_IMAGE_HEIGHT];
+	      /* MODIFIED */
+	      dma_copy_image_buffer(&current_image, image_size, 1);
 
+	      /*------------------------ IMAGE PROCESSING SECTION ----------*/
+	      /* image_current: holds last image frame
+	       * image_buffer_1 and image_buffer_2 are of size [FULL_IMAGE_SIZE], reside in fast RAM
+	       * and are free to be used for image processing
+	       *
+	       */
+	      getPose(&image_current, &image_buffer_1, &image_buffer_2);
+
+#if 0
 		/* new gyroscope data */
 		float x_rate_sensor, y_rate_sensor, z_rate_sensor;
 		int16_t gyro_temp;
@@ -408,10 +440,10 @@ int main(void)
 		float x_rate = y_rate_sensor; // change x and y rates
 		float y_rate = - x_rate_sensor;
 		float z_rate = z_rate_sensor; // z is correct
-
+#endif
 		/* calculate focal_length in pixel */
-		const float focal_length_px = (global_data.param[PARAM_FOCAL_LENGTH_MM]) / (4.0f * 6.0f) * 1000.0f; //original focal lenght: 12mm pixelsize: 6um, binning 4 enabled
-
+	//	const float focal_length_px = (global_data.param[PARAM_FOCAL_LENGTH_MM]) / (4.0f * 6.0f) * 1000.0f; //original focal lenght: 12mm pixelsize: 6um, binning 4 enabled
+#if 0
 		/* get sonar data */
 		distance_valid = sonar_read(&sonar_distance_filtered, &sonar_distance_raw);
 
@@ -420,7 +452,8 @@ int main(void)
 			sonar_distance_filtered = 0.0f;
 			sonar_distance_raw = 0.0f;
 		}
-
+#endif
+#if 0
 		/* compute optical flow */
 		if (FLOAT_EQ_INT(global_data.param[PARAM_SENSOR_POSITION], BOTTOM))
 		{
@@ -458,7 +491,7 @@ int main(void)
 					accumulated_flow_x += pixel_flow_y  / focal_length_px * 1.0f; //rad axis swapped to align x flow around y axis
 					accumulated_flow_y += pixel_flow_x  / focal_length_px * -1.0f;//rad
 					accumulated_gyro_x += x_rate * deltatime / 1000000.0f;	//rad
-					accumulated_gyro_y += y_rate * deltatime / 1000000.0f;	//rad
+					accumulated_gyro_y += y_rate * deltatime / 1000000.0f;	//ra
 					accumulated_gyro_z += z_rate * deltatime / 1000000.0f;	//rad
 					accumulated_framecount++;
 					accumulated_quality += qual;
@@ -635,7 +668,7 @@ int main(void)
 		{
 			communication_receive_forward();
 		}
-
+#endif
 		/* send system state, receive commands */
 		if (send_system_state_now)
 		{

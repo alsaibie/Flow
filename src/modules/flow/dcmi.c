@@ -284,6 +284,40 @@ TODO(NB dma_copy_image_buffers is calling uavcan_run());
 }
 
 /**
+ * @brief Copy image to fast RAM address
+ *
+ * @param current_image Current image buffer
+ * @param image_size Image size of the image to copy
+ * @param image_step Image to wait for (if 1 no waiting)
+ */
+void dma_copy_image_buffer(uint8_t ** current_image, uint16_t image_size, uint8_t image_step){
+
+      /* wait for new image if needed */
+      while(image_counter < image_step) {}
+      image_counter = 0;
+
+      /* time between images */
+      time_between_images = time_between_next_images;
+
+      /* copy image */
+      if (dcmi_image_buffer_unused == 1)
+      {
+              for (uint16_t pixel = 0; pixel < image_size; pixel++)
+                      (*current_image)[pixel] = (uint8_t)(dcmi_image_buffer_8bit_1[pixel]);
+      }
+      else if (dcmi_image_buffer_unused == 2)
+      {
+              for (uint16_t pixel = 0; pixel < image_size; pixel++)
+                      (*current_image)[pixel] = (uint8_t)(dcmi_image_buffer_8bit_2[pixel]);
+      }
+      else
+      {
+              for (uint16_t pixel = 0; pixel < image_size; pixel++)
+                      (*current_image)[pixel] = (uint8_t)(dcmi_image_buffer_8bit_3[pixel]);
+      }
+}
+
+/**
  * @brief Send calibration image with MAVLINK over USB
  *
  * @param image_buffer_fast_1 Image buffer in fast RAM

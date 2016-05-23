@@ -121,7 +121,8 @@ set(CXX_WARNINGS
     )
 set(LD_FLAGS
     -Wl,--warn-common
-    -Wl,--gc-sections
+    -Wl,--gc-sections,
+
     )
 set(CMAKE_C_FLAGS
     ${CPU_FLAGS}
@@ -203,6 +204,9 @@ set(PX4FLOW_HDRS
     inc/usbd_conf.h
     inc/usbd_desc.h
     inc/utils.h
+    inc/ellipse.h
+    inc/fast-edge.h
+    inc/threshold.h
     )
 
 set(PX4FLOW_SRC
@@ -229,6 +233,9 @@ set(PX4FLOW_SRC
     src/utils.c
     src/system_stm32f4xx.c
     src/stm32f4xx_it.c
+    src/ellipse.c
+    src/fast-edge.c
+    src/threshold.c
     )
 
 # building
@@ -249,6 +256,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Arm")
         LINK_FLAGS "-T${CMAKE_SOURCE_DIR}/stm32f4.ld"
         #COMPILE_FLAGS "-Werror"
     )
+    
     generate_firmware(px4flow)
 else()
     # host based testing
